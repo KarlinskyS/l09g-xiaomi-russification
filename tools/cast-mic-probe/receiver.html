@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>L09G mic probe</title>
+  <script src="https://www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js"></script>
+</head>
+<body>
+<script>
+(function () {
+  var NS = "urn:x-cast:hermes.micprobe";
+  var mgr = cast.receiver.CastReceiverManager.getInstance();
+  var bus = mgr.getCastMessageBus(NS, cast.receiver.CastMessageBus.MessageType.JSON);
+
+  function send(obj) {
+    try { bus.broadcast(obj); } catch (e) {}
+  }
+
+  function errShape(e) {
+    return {
+      name: e && e.name || "Error",
+      message: String(e && e.message || e),
+      constraint: e && e.constraintName || null
+    };
+  }
+
+  function measure(stream) {
+    return new Promise(function (resolve) {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        var ac = new AC();
+        var src = ac.createMediaStreamSource(stream);
+        var analyser = ac.createAnalyser();
+        analyser.fftSize = 2048;
+        src.connect(analyser);
+        var buf = new Float32Array(analyser.fftSize);
+        var samples = [];
+        var iv = setInterval(function () {
+          analyser.getFloatTimeDomainData(buf);
+          var s = 0;
+          for (var i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+          samples.push(Math.sqrt(s / buf.length));
+          if (samples.length >= 10) {
+            clearInterval(iv);
+            var peak = Math.max.apply(null, samples);
+            var avg = samples.reduce(function (a, b) { return a + b; }, 0) / samples.length;
+            resolve({
+              rmsAvg: avg,
+              rmsPeak: peak,
+              n: samples.length,
+              sampleRate: ac.sampleRate,
+              likely: peak > 1e-4 ? "signal" : "silence-or-zeros"
+            });
+            if (ac.close) ac.close();
+          }
+        }, 100);
+      } catch (e) {
+        resolve(errShape(e));
+      }
+    });
+  }
+
+  async function probe() {
+    var report = {
+      type: "probe",
+      href: location.href,
+      protocol: location.protocol,
+      isSecureContext: !!window.isSecureContext,
+      userAgent: navigator.userAgent,
+      hasMediaDevices: !!(navigator.mediaDevices),
+      hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+      hasLegacyGum: !!(navigator.getUserMedia || navigator.webkitGetUserMedia),
+      devicesBefore: null,
+      devicesAfter: null,
+      gum: null,
+      signal: null
+    };
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        var before = await navigator.mediaDevices.enumerateDevices();
+        report.devicesBefore = before.map(function (d) {
+          return { kind: d.kind, label: d.label || "", id: d.deviceId ? "set" : "" };
+        });
+      }
+    } catch (e) {
+      report.devicesBefore = errShape(e);
+    }
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        report.gum = { ok: false, reason: "api-missing" };
+      } else {
+        var stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        report.gum = {
+          ok: true,
+          tracks: stream.getAudioTracks().map(function (t) {
+            return {
+              label: t.label,
+              enabled: t.enabled,
+              muted: t.muted,
+              readyState: t.readyState,
+              settings: t.getSettings ? t.getSettings() : null
+            };
+          })
+        };
+        try {
+          var after = await navigator.mediaDevices.enumerateDevices();
+          report.devicesAfter = after.map(function (d) {
+            return { kind: d.kind, label: d.label || "", id: d.deviceId ? "set" : "" };
+          });
+        } catch (e) {
+          report.devicesAfter = errShape(e);
+        }
+        report.signal = await measure(stream);
+        stream.getTracks().forEach(function (t) { t.stop(); });
+      }
+    } catch (e) {
+      report.gum = { ok: false, reason: "rejected", error: errShape(e) };
+    }
+    send(report);
+  }
+
+  mgr.onReady = function () { probe(); };
+  mgr.start({ statusText: "l09g-mic-probe" });
+})();
+</script>
+</body>
+</html>
