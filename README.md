@@ -31,7 +31,8 @@ Full writeup with the exact token-retrieval steps: [`docs/SUCCESS-russian-L09G-2
 ```
 tools/
   russify-speaker.sh      # entrypoint: ./tools/russify-speaker.sh <speaker-ip> [locale]
-  russify_speaker.py      # pulls master-token -> LAT via homegraph, POSTs the locale over adb
+  russify_speaker.py      # pulls master-token -> LAT via homegraph, POSTs the locale over LAN
+  cast-mic-probe/         # Cast Custom Receiver probe for built-in mics (see docs)
 
 docs/
   SUCCESS-russian-L09G-2026-07-24.md         # the recipe that actually worked
@@ -42,6 +43,9 @@ docs/
   google-assistant-mitm-russification-l09g.md
   google-home-onboarding-re-report.md
   l09g-device-teardown-research.md
+  l09g-ota-first-look-2026-11-08.md          # OTA 1.44.27 / 1.52.56, testkey, Xiaomi HDR1
+  l09g-ssh-and-cast-mic-2026-11-09.md        # Dropbear closed on stable-channel; Cast getUserMedia probe
+  HANDOFF-voice-replacement-l09g.md          # prompt for the next agent: replace Assistant with Hermes
   historical-mitm-instruction-memu-2019.md   # older MITM-based approaches (2019, 2022) that no
   historical-mitm-instruction-ruimg-2022.md  # longer reliably reproduce in 2026
   4pda-post.md                               # writeup drafted for posting to 4pda.to
